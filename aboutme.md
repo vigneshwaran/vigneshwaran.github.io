@@ -5,12 +5,11 @@ subtitle: About me
 ---
 > **COMPUTER SCIENCE ENGINEERING STUDENT**
 
-I am a/an
+I am an
 * Introvert
-* Observer 
 * Computer nerd
  
-Passionate about
+Passionate about\
 - Competitive Programming
 - Deep Learning
 - Math

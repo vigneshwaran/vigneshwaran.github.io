@@ -5,7 +5,7 @@ subtitle: About me
 ---
 ## COMPUTER SCIENCE ENGINEERING STUDENT
 
-I am an
+What I think of myself,
 * Introvert
 * Computer nerd
  

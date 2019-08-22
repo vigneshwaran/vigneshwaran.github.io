@@ -11,7 +11,6 @@ I am a/an
  * Computer nerd
 
 Passionate about
-
 - Competitive Programming
 - Deep Learning
 

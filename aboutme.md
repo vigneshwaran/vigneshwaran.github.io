@@ -17,4 +17,4 @@ Passionate about
 
 Currently working on development of Magnus Rover in the field of autonomous navigation.
 
-Love playing video games.
+Love playing video games and cricket.

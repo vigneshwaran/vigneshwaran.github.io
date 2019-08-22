@@ -1,7 +1,7 @@
 ---
 layout: page
-title: About me
-# subtitle: Why you'd want to go on a date with me
+title: Vigneshwaran N
+subtitle: About me
 ---
 
 My name is _Vigneshwaran N_. I am a Computer Science Engineering Student.

@@ -3,7 +3,7 @@ layout: page
 title: Vigneshwaran N
 subtitle: About me
 ---
-> **COMPUTER SCIENCE ENGINEERING STUDENT**
+> ##COMPUTER SCIENCE ENGINEERING STUDENT
 
 I am an
 * Introvert

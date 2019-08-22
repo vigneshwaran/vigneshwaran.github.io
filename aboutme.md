@@ -3,12 +3,12 @@ layout: page
 title: Vigneshwaran N
 subtitle: About me
 ---
-> # COMPUTER SCIENCE ENGINEERING STUDENT
+> **COMPUTER SCIENCE ENGINEERING STUDENT**
 
 I am a/an
- * Introvert
- * Observer 
- * Computer nerd
+* Introvert
+* Observer 
+* Computer nerd
  
 Passionate about
 - Competitive Programming

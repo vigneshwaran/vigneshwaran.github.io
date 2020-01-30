@@ -14,7 +14,7 @@ Passionate about
 - Deep Learning
 - Math
 
-Currently working on development of Magnus Rover in the field of autonomous navigation.
+Currently working on development of Mars Rover (Aurora) in the field of autonomous navigation.
 
 Love playing video games and cricket.
 

@@ -1,0 +1,479 @@
+---
+layout: single
+title: "What's Behind PPO's Collapse in Long-CoT?"
+date: 2025-03-01
+permalink: /posts/2025/03/hacks-for-ppo/
+tags:
+- RL
+- PPO
+- CoT
+---
+
+<!-- Fonts for Distill look -->
+<link href="https://fonts.googleapis.com/css?family=Lora:400,400i,700|Open+Sans:400,600,700&display=swap"
+    rel="stylesheet">
+
+<!-- MathJax for LaTeX -->
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script>
+    MathJax = {
+        tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']]
+        }
+    };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+<style>
+    /* Distill.pub-inspired CSS */
+    :root {
+        --accent: #d73a49;
+        /* DeepSeek/Torch Red */
+        --text: var(--global-text-color);
+        --bg: var(--global-bg-color);
+        --sidenote: var(--global-text-color-light);
+        --code-bg: var(--global-code-background-color);
+    }
+
+    body {
+        font-family: 'Lora', serif;
+        color: var(--text);
+        line-height: 1.6;
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg);
+    }
+
+    header {
+        text-align: center;
+        padding: 4rem 1rem;
+        background: var(--bg);
+        border-bottom: 1px solid var(--global-border-color);
+    }
+
+    h1 {
+        font-family: 'Open Sans', sans-serif;
+        font-weight: 700;
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .subtitle {
+        font-family: 'Open Sans', sans-serif;
+        font-size: 1.2rem;
+        color: var(--sidenote);
+        margin-bottom: 1.5rem;
+    }
+
+    .meta {
+        font-size: 0.9rem;
+        color: var(--sidenote);
+    }
+
+    article {
+        max-width: 100%;
+        /* Standard reading width */
+        margin: 0 auto;
+        padding: 2rem 1rem;
+        position: relative;
+    }
+
+    h2 {
+        font-family: 'Open Sans', sans-serif;
+        font-size: 1.8rem;
+        margin-top: 3rem;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 0.5rem;
+    }
+
+    h3 {
+        font-family: 'Open Sans', sans-serif;
+        font-size: 1.4rem;
+        margin-top: 2rem;
+        color: var(--global-text-color);
+    }
+
+    p {
+        margin-bottom: 1.5rem;
+        font-size: 1.1rem;
+    }
+
+    /* Sidenote implementation */
+    .sidenote-wrapper {
+        position: relative;
+    }
+
+    .sidenote {
+        display: none;
+        /* Hidden on mobile by default */
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: var(--sidenote);
+    }
+
+    @media (min-width: 1200px) {
+        .sidenote {
+            display: block;
+            position: absolute;
+            right: -250px;
+            width: 200px;
+            top: 0;
+        }
+    }
+
+    /* Code blocks */
+    pre {
+        background: var(--code-bg);
+        padding: 1rem;
+        border-radius: 5px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+        border: 1px solid var(--global-border-color);
+    }
+
+    /* Figures & Visualizations */
+    figure {
+        margin: 2rem 0;
+        text-align: center;
+    }
+
+    figcaption {
+        font-family: 'Open Sans', sans-serif;
+        font-size: 0.9rem;
+        color: var(--sidenote);
+        margin-top: 0.5rem;
+    }
+
+    .viz-container {
+        border: 1px solid var(--global-border-color);
+        border-radius: 8px;
+        padding: 20px;
+        background: var(--bg);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .viz-controls {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 15px;
+        font-family: 'Open Sans', sans-serif;
+        font-size: 0.9rem;
+        justify-content: center;
+    }
+
+    input[type=range] {
+        vertical-align: middle;
+    }
+
+    /* Callout box - adapted for dark mode using opacity/mix via variables if possible, or fallback */
+    .insight-box {
+        background-color: var(--global-code-background-color);
+        /* Use code bg as base for neutrality */
+        border-left: 4px solid #ffc107;
+        padding: 1rem 1.5rem;
+        margin: 2rem 0;
+        border-radius: 0 5px 5px 0;
+    }
+
+    .result-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Open Sans', sans-serif;
+        margin: 2rem 0;
+    }
+
+    .result-table th,
+    .result-table td {
+        border-bottom: 1px solid var(--global-border-color);
+        padding: 8px;
+        text-align: center;
+    }
+
+    .result-table th {
+        background-color: var(--global-code-background-color);
+    }
+
+    .highlight {
+        color: var(--accent);
+        font-weight: bold;
+    }
+</style>
+</style>
+
+<header>
+    <!-- <h1>What's Behind PPO's Collapse in Long-CoT?</h1> -->
+    <div class="subtitle">Value Optimization Holds the Secret</div>
+    <div class="meta">
+        Based on arXiv:2503.01491 (ByteDance Seed) &bull; Study Note Visualization
+    </div>
+</header>
+
+<article>
+    <p class="abstract">
+        <strong>Abstract:</strong> While Reinforcement Learning (RL) has driven recent reasoning breakthroughs (like
+        DeepSeek-R1), standard PPO often "collapses" in long Chain-of-Thought tasks. This article explores the
+        mathematical root causes—<strong>Value Initialization Bias</strong> and <strong>Reward Signal
+            Decay</strong>—and visualizes why a new method, <em>VC-PPO</em>, succeeds by decoupling policy and value
+        optimization.
+    </p>
+
+    <h2>The Mystery: Why does PPO fail?</h2>
+
+    <p>
+        In the era of "System 2" thinking models, the goal is to generate long chains of reasoning (CoT) spanning
+        thousands of tokens. Recent approaches like <strong>GRPO</strong> (Group Relative Policy Optimization) have
+        succeeded by bypassing the value model entirely, relying on group-based statistics.
+    </p>
+
+    <p>
+        Standard PPO, however, struggles. It tends to suffer from <strong>length collapse</strong>: the model stops
+        reasoning early, outputting short, incorrect answers.
+    </p>
+
+    <div class="sidenote-wrapper">
+        <p>
+            Why care about PPO if GRPO works? GRPO provides <em>response-level</em> feedback. PPO offers
+            <em>token-level</em> value estimation, which—if fixed—offers finer-grained credit assignment for complex
+            logic.
+        </p>
+        <div class="sidenote">GRPO uses outcomes of a group of outputs to estimate baseline. PPO uses a learned
+            Value network $V(s)$.</div>
+    </div>
+
+    <h2>Root Cause 1: The Math of Silence (Signal Decay)</h2>
+
+    <p>
+        The first culprit lies in how PPO calculates the <strong>Generalized Advantage Estimation (GAE)</strong>. In
+        standard RL (like robotics), we use a discount factor $\lambda < 1$ to reduce variance. </p>
+
+            <p>
+                The reward signal propagating from the final answer (at time $T$) to a reasoning token (at time $t$)
+                decays exponentially:
+            </p>
+
+            $$ \text{Signal}_t \propto \lambda^{T-t} \cdot r_{\text{outcome}} $$
+
+            <p>
+                In classic tasks, $T$ is small. in Long-CoT, $T$ can be 1,000+.
+            </p>
+
+            <div class="viz-container">
+                <h4 style="margin-top:0; text-align:center; font-family:'Open Sans'">Interactive: The Vanishing
+                    Reward</h4>
+                <div class="viz-controls">
+                    <label>
+                        Sequence Length ($T$): <span id="valT">1000</span>
+                        <br><input type="range" id="rangeT" min="100" max="2000" step="100" value="1000">
+                    </label>
+                    <label>
+                        GAE Lambda ($\lambda$): <span id="valLam">0.95</span>
+                        <br><input type="range" id="rangeLam" min="0.90" max="1.0" step="0.01" value="0.95">
+                    </label>
+                </div>
+                <canvas id="decayChart" width="700" height="300"></canvas>
+                <figcaption>
+                    <strong>Figure 1:</strong> The Y-axis shows the fraction of the final reward reaching token $t$.
+                    With standard $\lambda=0.95$, early reasoning tokens receive effectively <strong>zero</strong>
+                    signal.
+                </figcaption>
+            </div>
+
+            <script>
+                // Simple Canvas Drawing for Signal Decay
+                const canvas = document.getElementById('decayChart');
+                const ctx = canvas.getContext('2d');
+                const rangeT = document.getElementById('rangeT');
+                const rangeLam = document.getElementById('rangeLam');
+                const valT = document.getElementById('valT');
+                const valLam = document.getElementById('valLam');
+
+                function drawChart() {
+                    const T = parseInt(rangeT.value);
+                    const lam = parseFloat(rangeLam.value);
+
+                    valT.textContent = T;
+                    valLam.textContent = lam.toFixed(2);
+
+                    // Clear
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Dimensions
+                    const padding = 40;
+                    const width = canvas.width - padding * 2;
+                    const height = canvas.height - padding * 2;
+
+                    // Draw Axes
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(padding, padding);
+                    ctx.lineTo(padding, height + padding); // Y axis
+                    ctx.lineTo(width + padding, height + padding); // X axis
+                    ctx.stroke();
+
+                    // Labels
+                    ctx.font = "14px Open Sans";
+                    ctx.fillStyle = "#333";
+                    ctx.fillText("Token Position (t)", width / 2 + padding, height + padding + 30);
+                    ctx.save();
+                    ctx.translate(15, height / 2 + padding);
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.fillText("Reward Signal Strength", 0, 0);
+                    ctx.restore();
+
+                    // Plot Decay
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#d73a49';
+                    ctx.lineWidth = 3;
+
+                    // Normalize X to fit T in width
+                    // Normalize Y (0 to 1)
+
+                    for (let t = 0; t <= T; t += (T / 200)) {
+                        // Formula: signal = lam^(T-t)
+                        const signal = Math.pow(lam, T - t);
+
+                        const x = padding + (t / T) * width;
+                        const y = padding + height - (signal * height);
+
+                        if (t === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    // Draw Start and End Points
+                    ctx.fillStyle = "#d73a49";
+
+                    // Start point
+                    const startSignal = Math.pow(lam, T);
+                    ctx.beginPath();
+                    ctx.arc(padding, padding + height - (startSignal * height), 5, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    // End point (always 1.0)
+                    ctx.beginPath();
+                    ctx.arc(padding + width, padding, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                rangeT.addEventListener('input', drawChart);
+                rangeLam.addEventListener('input', drawChart);
+                drawChart(); // Init
+            </script>
+
+            <div class="insight-box">
+                <h3>Mathematical Insight</h3>
+                <p>In standard RL (Mujoco/Atari), rewards accumulate constantly, so variance is high. We need
+                    $\lambda < 1$ to smooth it out. In CoT reasoning, rewards are <strong>sparse</strong> (only at
+                        the end). There is no intermediate noise to smooth out! Therefore, variance reduction on the
+                        Value function is actually harmful bias.</p>
+            </div>
+
+            <h2>Root Cause 2: Value Initialization Bias</h2>
+
+            <p>
+                The second problem is how the Value model ($V$) is initialized. Typically, $V$ is initialized from
+                the Reward Model ($R$).
+            </p>
+
+            <ul>
+                <li><strong>Reward Model ($R$):</strong> Trained to score <em>complete</em> responses at the
+                    <code>EOS</code> token. It assigns low scores to incomplete prefixes.
+                </li>
+                <li><strong>Value Model ($V$):</strong> Needs to predict expected future return.</li>
+            </ul>
+
+            <p>
+                When $V \approx R$ at initialization, $V(s_t)$ (for an early token) is artificially low. This
+                creates a distorted advantage:
+            </p>
+
+            $$ \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t) $$
+
+            <p>
+                Because $V(s_t)$ is incorrectly low, $\delta_t$ becomes erratic (often positively biased for the
+                wrong reasons), leading the policy to collapse to shorter sequences where the RM's scoring is more
+                stable.
+            </p>
+
+            <h2>The Solution: VC-PPO</h2>
+
+            <p>The paper proposes <strong>Value-Calibrated PPO</strong>, which introduces two specific fixes:</p>
+
+            <h3>1. Value Pretraining (Fixing Bias)</h3>
+            <p>
+                Before RL begins, freeze the policy and train the Value model using Monte Carlo estimates
+                ($\lambda=1$). This aligns $V$ with the true expected returns of the policy, eliminating the "RM
+                initialization bias."
+            </p>
+
+            <h3>2. Decoupled-GAE (Fixing Decay)</h3>
+            <p>
+                This is the critical innovation. The paper argues that Policy and Value have different needs:
+            </p>
+            <ul>
+                <li><strong>Value Head:</strong> Needs <strong>unbiased</strong> estimates to learn true long-term
+                    value. Use $\lambda_{\text{critic}} = 1.0$.</li>
+                <li><strong>Policy Head:</strong> Still needs <strong>low variance</strong> to stabilize updates.
+                    Use $\lambda_{\text{actor}} \approx 0.95$.</li>
+            </ul>
+
+            $$ A^{\text{policy}} \leftarrow \text{GAE}(\lambda=0.95) $$
+            $$ V^{\text{target}} \leftarrow \text{Returns}(\lambda=1.0) $$
+
+            <h2>Empirical Results</h2>
+
+            <p>
+                Tested on Qwen2.5-32B with math reasoning tasks (AIME, GPQA).
+            </p>
+
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Context</th>
+                        <th>AIME pass@1</th>
+                        <th>GPQA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Standard PPO</td>
+                        <td>8K</td>
+                        <td style="color:red">5.6% (Collapse)</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>GRPO (DeepSeek-R1 logic)</td>
+                        <td>16K</td>
+                        <td>38.9%</td>
+                        <td>49.4%</td>
+                    </tr>
+                    <tr>
+                        <td><strong>VC-PPO (Ours)</strong></td>
+                        <td>16K</td>
+                        <td class="highlight">48.8%</td>
+                        <td>48.8%</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p>
+                <strong>VC-PPO outperforms GRPO by ~10%</strong> on AIME, proving that PPO's token-level
+                optimization is superior to group-level optimization <em>if</em> the value estimation is stabilized.
+            </p>
+
+            <hr>
+
+            <h3>Conclusion</h3>
+            <p>
+                The "collapse" of PPO in reasoning tasks isn't a fundamental flaw of the algorithm, but a mismatch
+                between hyperparameters (designed for dense-reward robotics) and the sparse-reward nature of
+                reasoning. By <strong>pretraining value</strong> and <strong>decoupling GAE</strong>, we unlock the
+                full potential of token-level RLHF.
+            </p>
+
+</article>
